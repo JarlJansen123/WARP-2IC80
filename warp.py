@@ -1,6 +1,7 @@
 from scapy.all import *
 from arp import arp
 from dnsfinal import dnsfinal
+import threading
 
 print("--=====-- Welcome to WARP, ARP/DNS poisoning tool --=====--")
 time.sleep(0.5)
@@ -29,14 +30,23 @@ while(not(interface in get_if_list())):
         print("Enter a valid input!")
 
 #calling the process we want to run
+proc_thread = None
 if(mode == "arp"):
     process = arp(interface)
     process.getInput()
-    process.startProcess()
+    proc_thread = threading.Thread(target=process.startProcess)
+    proc_thread.daemon = True
+    proc_thread.start()
 elif(mode == "dns"):
     process = dnsfinal(interface)
     process.getInput()
     process.startProcess()
 
-
+end_thread = raw_input("Press enter to stop the thread that is currently running")
+print("stopping the poisoning")
+proc_thread.join()
+if proc_thread.is_alive():
+    print("HELP IT IS NOT WORKING")
+else:
+    print("IT WORKS")
 
