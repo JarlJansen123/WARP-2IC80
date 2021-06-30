@@ -12,4 +12,4 @@ To run the project
 
 3. Simply write 'sudo python warp.py' and the GUI will open. Do what the GUI says to do
 
-4. *For DNS spoofing to work, you need to make sure that packet forwarding is disabled. To do so, follow the guide here: https://linuxconfig.org/how-to-turn-on-off-ip-forwarding-in-linux
+4. *For DNS spoofing to work, you need to make sure that packet forwarding is disabled. If sysctl net.ipv4.ip_forward returns 0, everything is good. Otherwise, follow the guide here: https://linuxconfig.org/how-to-turn-on-off-ip-forwarding-in-linux
