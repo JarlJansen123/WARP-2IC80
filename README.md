@@ -1,9 +1,11 @@
 # LabOnOffensiveSecurity
 
-group project lab on offensive security
+Group project Lab on Offensive Security
 
-to run the project, open all 3 virtual machines
+To run the project
 
-on the attack m3, open the directory with these files in it in the command prompt
+1. Open all 3 virtual machines
 
-simply write 'sudo python warp.py' and the GUI will open
+2. On the attack m3, open the directory with these files in it in the command prompt
+
+3. Simply write 'sudo python warp.py' and the GUI will open. Do what the GUI says to do
