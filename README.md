@@ -1,6 +1,6 @@
 # LabOnOffensiveSecurity
 
-Group project Lab on Offensive Security
+Group project Lab on Offensive Computer Security
 
 To run the project
 
